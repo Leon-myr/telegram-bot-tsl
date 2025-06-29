@@ -2,6 +2,7 @@ import os, asyncio
 from datetime import datetime
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from modules.basket import load_basket
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 
@@ -15,10 +16,25 @@ async def morning_message():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Cześć Chodakowski! Bot 24/7 🚀")
+async def koszyk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Wczytujemy DataFrame
+    df = load_basket()
+    total = df['value'].sum()
+    perc  = (df['value'] / df['limit'] * 100).round(2).mean()
+
+    # Budujemy tekst odpowiedzi
+    msg = (
+        f"📊 *Podsumowanie koszyka* 📊\n"
+        f"• Klientów w pliku: {len(df)}\n"
+        f"• Suma wartości: {total:,.2f} zł\n"
+        f"• Średnie wykorzystanie limitu: {perc:.1f}%"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("koszyk", koszyk))
 
     # 7:40 CET = 5:40 UTC
     sched = AsyncIOScheduler(timezone="Europe/Warsaw")
