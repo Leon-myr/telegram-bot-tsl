@@ -1,37 +1,31 @@
-import os
-from telegram import Update
+import os, asyncio
+from datetime import datetime
+from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pytz
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID"))
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Cześć! Jestem Twoim osobistym asystentem sprzedaży 🚀")
-
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
-import asyncio
-from datetime import datetime
-from telegram import Bot
+CHAT_ID   = int(os.getenv("CHAT_ID"))
 
 async def morning_message():
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    message = (
-        f"🚀 Dzień dobry Chodakowski!\n"
-        f"Dzisiaj jest {now}\n"
-        f"- Przypominam o codziennej analizie klientów\n"
-        f"- Za moment otrzymasz wiadomości z rynku i cenę paliwa\n\n"
-        f"Działamy! 🔥"
-    )
-    bot = Bot(token=BOT_TOKEN)
-    await bot.send_message(chat_id=CHAT_ID, text=message)
+    now = datetime.now(pytz.timezone("Europe/Warsaw")).strftime("%Y-%m-%d %H:%M:%S")
+    text = f"🚀 Dzień dobry Chodakowski!\nDzisiaj jest {now}\n– Przypomnienie o analizie klientów i rynku."
+    await Bot(BOT_TOKEN).send_message(chat_id=CHAT_ID, text=text)
 
-# Uruchom tylko jeśli skrypt wywoływany jest bezpośrednio (np. przez CRON)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Cześć Chodakowski! Bot 24/7 🚀")
+
 if __name__ == "__main__":
-    asyncio.run(morning_message())
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+
+    # 7:40 CET = 5:40 UTC
+    sched = AsyncIOScheduler(timezone="Europe/Warsaw")
+    sched.add_job(lambda: asyncio.create_task(morning_message()),
+                  "cron", hour=7, minute=40)
+    sched.start()
+
+    print("✅ Bot + scheduler uruchomione")
+    app.run_polling()
 
