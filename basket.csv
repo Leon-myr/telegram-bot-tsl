@@ -1,0 +1,5 @@
+client,status,value,limit
+KlientA,active,100000,200000
+KlientB,active,50000,100000
+KlientC,inactive,0,50000
+
