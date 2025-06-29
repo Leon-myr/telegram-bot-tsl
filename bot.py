@@ -4,75 +4,79 @@ import logging
 from dotenv import load_dotenv
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-from telegram import Bot
+from telegram import Update, Bot
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    ContextTypes,
+    ContextTypes
 )
 
-# 1. Załaduj zmienne z .env
+# ─── 1) Załaduj zmienne środowiskowe z .env ────────────
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID   = os.getenv("CHAT_ID")
 if not BOT_TOKEN or not CHAT_ID:
-    raise RuntimeError("❌ Musisz ustawić BOT_TOKEN i CHAT_ID w .env")
+    raise RuntimeError("❌ Musisz ustawić zmienne środowiskowe BOT_TOKEN i CHAT_ID")
 CHAT_ID = int(CHAT_ID)
 
-# 2. Konfiguracja logowania
+# ─── 2) Konfiguracja logowania ──────────────────────────
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# 3. Definicja handlerów
-async def start(update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user.first_name or "tam"
+# ─── 3) Handlery komend ─────────────────────────────────
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user.first_name or "Użytkowniku"
     await update.message.reply_text(f"Cześć, {user}! Bot działa. 🟢")
 
-async def fuel(update, context: ContextTypes.DEFAULT_TYPE):
+async def fuel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Tutaj display fuel data…")
 
-async def news(update, context: ContextTypes.DEFAULT_TYPE):
+async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📰 Najnowsze wiadomości…")
 
-async def training(update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🏋️ Plan treningowy…")
+async def training(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔥 Nasza oferta treningowa:\n"
+        "– Indywidualny program motywacyjny\n"
+        "– Wsparcie 24/7 przez ekspertów\n"
+        "– Bonus: darmowa konsultacja onboardingowa\n"
+        "\nWpisz /buy aby przejść do zakupu 💪"
+    )
 
-# 4. Funkcja główna (synchroniczna)
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🛒 Aby zakupić, wejdź na: https://twoja-firma.pl/kup")
+
+# ─── 4) Funkcja wywoływana przez scheduler ──────────────
+def scheduled_message():
+    bot = Bot(token=BOT_TOKEN)
+    bot.send_message(
+        chat_id=CHAT_ID,
+        text="⏰ Przypomnienie: sprawdź naszą ofertę sprzedażową!"
+    )
+
+# ─── 5) Główna funkcja uruchamiająca aplikację ─────────
 def main():
     # zbuduj aplikację
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # zarejestruj komendy
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("fuel",  fuel))
-    app.add_handler(CommandHandler("news",  news))
+    app.add_handler(CommandHandler("start",    start))
+    app.add_handler(CommandHandler("fuel",     fuel))
+    app.add_handler(CommandHandler("news",     news))
     app.add_handler(CommandHandler("training", training))
+    app.add_handler(CommandHandler("buy",      buy))
 
-    # ustaw scheduler
+    # uruchom scheduler (codziennie o 09:00)
     sched = BackgroundScheduler()
-    def daily_job():
-        Bot(BOT_TOKEN).send_message(
-            chat_id=CHAT_ID,
-            text=f"🔔 Przypomnienie dnia: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        )
-    sched.add_job(daily_job, "cron", hour=8, minute=0)
+    sched.add_job(scheduled_message, "cron", hour=9, minute=0)
     sched.start()
 
     # uruchom polling
-    try:
-        logger.info("🔄 Uruchamiam bota (polling)...")
-        app.run_polling()
-    except Exception as e:
-        if "Conflict" in str(e):
-            logger.warning("⚠ Konflikt getUpdates – retry")
-            app.run_polling()
-        else:
-            raise
+    app.run_polling()
 
-# 5. Entry point
 if __name__ == "__main__":
     main()
 
