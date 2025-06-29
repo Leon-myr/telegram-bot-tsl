@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import os
+import logging
+import telegram
 from dotenv import load_dotenv
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -8,68 +10,87 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
-    MessageHandler,
-    filters,
 )
 
-# 1. Załaduj .env
-load_dotenv()
+# ————— konfiguracja logowania —————
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
+# ————— 1. Załaduj zmienne z .env —————
+load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID   = os.getenv("CHAT_ID")
 
-# 2. Walidacja
+# ————— 2. Walidacja —————
 if not BOT_TOKEN or not CHAT_ID:
-    raise RuntimeError("❌ Musisz ustawić zmienne BOT_TOKEN i CHAT_ID w bot_env/.env")
-
+    raise RuntimeError(
+        "❌ Musisz ustawić BOT_TOKEN i CHAT_ID w .env"
+    )
 CHAT_ID = int(CHAT_ID)
 
-# 3. Funkcje handlerów
+# ————— 3. Handlery komend —————
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text=f"Cześć, {update.effective_user.first_name}! Bot działa. 🟢")
+    user = update.effective_user.first_name or "User"
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Cześć, {user}! Bot działa. 🟢"
+    )
 
 async def fuel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # tu Twój kod fetchujący ceny paliw
-    await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="Aktualne ceny paliw: ...")
+    # przykład odpowiedzi
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="⛽ Sprawdzam ceny paliw..."
+    )
 
 async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # tu Twój kod fetchujący newsy
-    await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="Najnowsze wiadomości: ...")
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="📰 Oto najnowsze wiadomości..."
+    )
 
 async def training(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # tu Twój kod fetchujący trening
-    await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="Plan treningu: ...")
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🏋️ Rozpoczynam trening..."
+    )
 
-# 4. Scheduler – przykładowa funkcja wysyłająca przypomnienie
+# ————— 4. (opcjonalnie) Funkcja schedulera —————
 def scheduled_job():
-    import telegram
-    bot = telegram.Bot(token=BOT_TOKEN)
-    bot.send_message(chat_id=CHAT_ID,
-                     text=f"📅 Przypomnienie: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    # wysyłka przypomnienia o ustalonej godzinie
+    now = datetime.now().strftime("%H:%M")
+    telegram.Bot(BOT_TOKEN).send_message(
+        chat_id=CHAT_ID,
+        text=f"⏰ Przypomnienie! Jest {now}."
+    )
 
-# 5. Budowa aplikacji
-async def main():
+# ————— 5. Main: zbuduj aplikację, zarejestruj handlery i schedulera —————
+def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # zarejestruj command handlery
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("fuel", fuel))
-    app.add_handler(CommandHandler("news", news))
+    # rejestracja komend
+    app.add_handler(CommandHandler("start",    start))
+    app.add_handler(CommandHandler("fuel",     fuel))
+    app.add_handler(CommandHandler("news",     news))
     app.add_handler(CommandHandler("training", training))
 
-    # uruchom scheduler w tle
-    sched = BackgroundScheduler()
-    sched.add_job(scheduled_job, "interval", hours=1)  # co godzinę
-    sched.start()
+    # uruchom BackgroundScheduler
+    scheduler = BackgroundScheduler()
+    # np. codziennie o 9:00
+    scheduler.add_job(scheduled_job, "cron", hour=9, minute=0)
+    scheduler.start()
+    logger.info("🔄 Scheduler uruchomiony w tle")
 
-    # Start polling
-    await app.run_polling()
+    # ————— 6. Start polling z obsługą konflików —————
+    try:
+        logger.info("🔄 Uruchamiam bota (run_polling)…")
+        app.run_polling(poll_interval=3.0, stop_signals=None, allowed_updates=None)
+    except telegram.error.Conflict:
+        logger.warning("⚠️ Conflict: inny polling jest w toku – ignoruję.")
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
 
