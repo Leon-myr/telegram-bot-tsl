@@ -1,45 +1,52 @@
 #!/usr/bin/env python3
 import os
-import threading
 from dotenv import load_dotenv
 from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
-from telegram import Bot, Update
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# --- 1) Załaduj .env -----------------------------------
-load_dotenv()
+# 1. Załaduj zmienne
+load_dotenv(dotenv_path="bot_env/.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID   = os.getenv("CHAT_ID")
 
 if not BOT_TOKEN or not CHAT_ID:
     raise RuntimeError("❌ Musisz ustawić zmienne środowiskowe BOT_TOKEN i CHAT_ID")
-
-# Chat ID jako int
 CHAT_ID = int(CHAT_ID)
 
-# --- 2) Inicjalizacja bota ----------------------------
-bot = Bot(token=BOT_TOKEN)
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+# 2. Import handlerów z modułów
+from modules.fuel     import fuel_handler
+from modules.news     import news_handler
+from modules.training import training_handler
 
-# --- 3) Handler /start --------------------------------
+# 3. Definicja /start
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    name = update.effective_user.first_name or "użytkowniku"
-    await update.message.reply_text(f"Cześć, {name}! Bot działa. 🟢")
+    await update.message.reply_text(
+        "👋 Witaj! Dostępne komendy:\n"
+        "/fuel — ceny paliw\n"
+        "/news — najnowsze wiadomości\n"
+        "/training — materiały szkoleniowe"
+    )
 
-app.add_handler(CommandHandler("start", start_handler))
+# 4. Zbuduj aplikację i zarejestruj komendy
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+app.add_handler(CommandHandler("start",    start_handler))
+app.add_handler(CommandHandler("fuel",     fuel_handler))
+app.add_handler(CommandHandler("news",     news_handler))
+app.add_handler(CommandHandler("training", training_handler))
 
-# --- 4) Job co godzinę --------------------------------
-def hourly_job():
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    bot.send_message(chat_id=CHAT_ID, text=f"⏰ Przypomnienie! Teraz jest {now}")
-
-sched = BackgroundScheduler()
-sched.add_job(hourly_job, "interval", hours=1)
+# 5. Scheduler (ASP Scheduler pod asyncio)
+sched = AsyncIOScheduler()
+# — przykład zadania codziennie o 08:00
+sched.add_job(
+    lambda: app.bot.send_message(chat_id=CHAT_ID, text="🌅 Dzienny raport gotowy!"),
+    trigger="cron", hour=8, minute=0
+)
 sched.start()
 
-# --- 5) Start bota (polling) --------------------------
+# 6. Start bota
 if __name__ == "__main__":
-    print("🔄 Uruchamiam bota i scheduler w tle...")
-    app.run_polling()  # <- bez dodatkowych argumentów
+    print("🔄 Uruchamiam Bot + Scheduler...")
+    app.run_polling()
 
