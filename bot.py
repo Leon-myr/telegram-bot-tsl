@@ -4,6 +4,78 @@ import logging
 from dotenv import load_dotenv
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from telegram import Bot
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
+
+# ——— 1. .env ———————————————————————————
+load_dotenv()
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID   = os.getenv("CHAT_ID")
+if not BOT_TOKEN or not CHAT_ID:
+    raise RuntimeError("❌ Ustaw BOT_TOKEN i CHAT_ID w .env")
+CHAT_ID = int(CHAT_ID)
+
+# ——— 2. Logger —————————————————————————
+logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s",
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ——— 3. Handlery —————————————————————————
+async def start(update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user.first_name or "tam"
+    await update.message.reply_text(f"Cześć, {user}! Bot działa. 🟢")
+
+async def fuel(update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Fuel – tu logika.")
+
+async def news(update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("News – tu logika.")
+
+async def training(update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Training – tu logika.")
+
+# ——— 4. main() synchroniczne —————————————————————
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("fuel",  fuel))
+    app.add_handler(CommandHandler("news",  news))
+    app.add_handler(CommandHandler("training", training))
+
+    # Scheduler
+    sched = BackgroundScheduler()
+    def daily_job():
+        Bot(BOT_TOKEN).send_message(
+            chat_id=CHAT_ID,
+            text=f"Przypomnienie: {datetime.now()}"
+        )
+    sched.add_job(daily_job, "cron", hour=8, minute=0)
+    sched.start()
+
+    # Uruchom polling
+    try:
+        logger.info("🔄 Uruchamiam bota (polling)...")
+        app.run_polling()
+    except Exception as e:
+        if "Conflict" in str(e):
+            logger.warning("⚠ Konflikt getUpdates – retry")
+            app.run_polling()
+        else:
+            raise
+
+if __name__ == "__main__":
+    main()
+sr/bin/env python3
+import os
+import logging
+from dotenv import load_dotenv
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
 from telegram import Update, Bot
 from telegram.ext import (
     ApplicationBuilder,
@@ -76,6 +148,3 @@ async def main():
             raise
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
-
