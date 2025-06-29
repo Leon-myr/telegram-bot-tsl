@@ -1,46 +1,44 @@
 #!/usr/bin/env python3
 import os
 import logging
-import telegram
+import time
 from dotenv import load_dotenv
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-from telegram import Update
+from telegram import Bot
+from telegram.error import Conflict
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
+    Update
 )
 
-# ————— konfiguracja logowania —————
+# ————— Logger —————
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# ————— 1. Załaduj zmienne z .env —————
+# ————— 1. Load .env —————
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID   = os.getenv("CHAT_ID")
 
-# ————— 2. Walidacja —————
 if not BOT_TOKEN or not CHAT_ID:
-    raise RuntimeError(
-        "❌ Musisz ustawić BOT_TOKEN i CHAT_ID w .env"
-    )
+    raise RuntimeError("❌ Ustaw BOT_TOKEN i CHAT_ID w .env")
 CHAT_ID = int(CHAT_ID)
 
-# ————— 3. Handlery komend —————
+# ————— 2. Handlery —————
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user.first_name or "User"
+    user = update.effective_user.first_name or "użytkowniku"
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"Cześć, {user}! Bot działa. 🟢"
     )
 
 async def fuel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # przykład odpowiedzi
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="⛽ Sprawdzam ceny paliw..."
@@ -58,38 +56,53 @@ async def training(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text="🏋️ Rozpoczynam trening..."
     )
 
-# ————— 4. (opcjonalnie) Funkcja schedulera —————
+# ————— 3. Scheduler job —————
 def scheduled_job():
-    # wysyłka przypomnienia o ustalonej godzinie
     now = datetime.now().strftime("%H:%M")
-    telegram.Bot(BOT_TOKEN).send_message(
+    Bot(BOT_TOKEN).send_message(
         chat_id=CHAT_ID,
         text=f"⏰ Przypomnienie! Jest {now}."
     )
 
-# ————— 5. Main: zbuduj aplikację, zarejestruj handlery i schedulera —————
+# ————— 4. Main —————
 def main():
+    # zbuduj aplikację
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # rejestracja komend
+    # **Usuń ewentualne webhooks** (by nie miksować trybów)
+    try:
+        app.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("🗑️ Webhook usunięty")
+    except Exception:
+        logger.debug("🔇 Nie udało się usunąć webhook (być może nie było)")
+
+    # zarejestruj komendy
     app.add_handler(CommandHandler("start",    start))
     app.add_handler(CommandHandler("fuel",     fuel))
     app.add_handler(CommandHandler("news",     news))
     app.add_handler(CommandHandler("training", training))
 
-    # uruchom BackgroundScheduler
+    # uruchom scheduler
     scheduler = BackgroundScheduler()
-    # np. codziennie o 9:00
     scheduler.add_job(scheduled_job, "cron", hour=9, minute=0)
     scheduler.start()
     logger.info("🔄 Scheduler uruchomiony w tle")
 
-    # ————— 6. Start polling z obsługą konflików —————
-    try:
-        logger.info("🔄 Uruchamiam bota (run_polling)…")
-        app.run_polling(poll_interval=3.0, stop_signals=None, allowed_updates=None)
-    except telegram.error.Conflict:
-        logger.warning("⚠️ Conflict: inny polling jest w toku – ignoruję.")
+    # uruchom polling w pętli, obsłuż Conflict
+    while True:
+        try:
+            logger.info("🔄 Start polling (drop_pending_updates=True)…")
+            app.run_polling(
+                poll_interval=3.0,
+                drop_pending_updates=True
+            )
+            break  # zakończ, jeśli run_polling zwróci normalnie
+        except Conflict:
+            logger.warning("⚠️ Conflict: inny getUpdates w toku, czekam 5s i retry…")
+            time.sleep(5)
+        except Exception as e:
+            logger.error(f"❌ Nieoczekiwany błąd: {e}, wychodzę.")
+            break
 
 if __name__ == "__main__":
     main()
