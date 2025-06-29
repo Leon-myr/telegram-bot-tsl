@@ -1,47 +1,52 @@
-import os, asyncio
+#!/usr/bin/env python3
+import os
+from dotenv import load_dotenv
 from datetime import datetime
+from apscheduler.schedulers.blocking import BlockingScheduler
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from modules.basket import load_basket
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import pytz
+
+# 1. Załaduj zmienne z .env
+load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID   = int(os.getenv("CHAT_ID"))
+CHAT_ID   = os.getenv("CHAT_ID")
 
-async def morning_message():
-    now = datetime.now(pytz.timezone("Europe/Warsaw")).strftime("%Y-%m-%d %H:%M:%S")
-    text = f"🚀 Dzień dobry Chodakowski!\nDzisiaj jest {now}\n– Przypomnienie o analizie klientów i rynku."
-    await Bot(BOT_TOKEN).send_message(chat_id=CHAT_ID, text=text)
+# 2. Walidacja
+if not BOT_TOKEN or not CHAT_ID:
+    raise RuntimeError("❌ Musisz ustawić zmienne środowiskowe BOT_TOKEN i CHAT_ID")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Cześć Chodakowski! Bot 24/7 🚀")
-async def koszyk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Wczytujemy DataFrame
-    df = load_basket()
-    total = df['value'].sum()
-    perc  = (df['value'] / df['limit'] * 100).round(2).mean()
+# Chat ID musi być liczbą
+CHAT_ID = int(CHAT_ID)
 
-    # Budujemy tekst odpowiedzi
-    msg = (
-        f"📊 *Podsumowanie koszyka* 📊\n"
-        f"• Klientów w pliku: {len(df)}\n"
-        f"• Suma wartości: {total:,.2f} zł\n"
-        f"• Średnie wykorzystanie limitu: {perc:.1f}%"
+# 3. Inicjalizacja bota
+bot = Bot(token=BOT_TOKEN)
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# 4. Przykładowy handler komendy /start
+async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user.first_name or "użytkowniku"
+    await update.message.reply_text(f"Cześć, {user}! Bot jest uruchomiony. 🟢")
+
+app.add_handler(CommandHandler("start", start_handler))
+
+# 5. Inicjalizacja BlockingScheduler
+sched = BlockingScheduler()
+
+# 6. Przykładowe zadanie: co godzinę wysyłaj wiadomość
+@sched.scheduled_job("interval", hours=1)
+def hourly_reminder():
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    bot.send_message(
+        chat_id=CHAT_ID,
+        text=f"⏰ Przypomnienie! Aktualny czas: {now}"
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("koszyk", koszyk))
-
-    # 7:40 CET = 5:40 UTC
-    sched = AsyncIOScheduler(timezone="Europe/Warsaw")
-    sched.add_job(lambda: asyncio.create_task(morning_message()),
-                  "cron", hour=7, minute=40)
+    # 7. Uruchomienie bota pollingiem (w tle)
+    #    + scheduler (blokuje wątek)
+    print("🔄 Uruchamiam Bot + Scheduler...")
+    app_task = app.run_polling(poll_interval=3.0, stop_signals=None, allowed_updates=None, clean=False)
+    # 8. Start schedulera (blokuje program)
     sched.start()
-
-    print("✅ Bot + scheduler uruchomione")
-    app.run_polling()
 
