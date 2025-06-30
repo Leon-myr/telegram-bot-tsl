@@ -3,10 +3,16 @@ import os
 import logging
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
-from telegram import Update, Bot, ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# 1) Załaduj zmienne środowiskowe
+from telegram import Bot, Update
+from telegram.constants import ParseMode
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
+
+# 1️⃣ Załaduj .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID   = os.getenv("CHAT_ID")
@@ -14,28 +20,28 @@ if not BOT_TOKEN or not CHAT_ID:
     raise RuntimeError("❌ Musisz ustawić BOT_TOKEN i CHAT_ID w .env")
 CHAT_ID = int(CHAT_ID)
 
-# 2) Konfiguracja logowania
+# 2️⃣ Konfiguracja logowania
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# 3) Definicja handlerów
-
+# — Handler /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user.first_name or "Partnerze"
+    name = update.effective_user.first_name or "Partnerze"
     text = (
-        f"👋 Cześć, {user}!\n"
+        f"👋 Cześć, {name}!\n"
         "Jestem *Bon Assistant*, Twój wirtualny partner sprzedażowy.\n\n"
         "Dostępne komendy:\n"
         "• /fuel — analiza kosztów paliwa ⛽\n"
-        "• /news — najnowsze wiadomości rynkowe 📰\n"
-        "• /training — oferta szkoleń 💪\n"
+        "• /news — najnowsze wiadomości 📰\n"
+        "• /training — oferta szkoleń 💼\n"
         "• /buy — przejdź do zakupu 🛒\n"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+# — Handler /fuel
 async def fuel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "⛽ *Raport paliwowy*\n"
@@ -45,6 +51,7 @@ async def fuel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+# — Handler /news
 async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "📰 *Najnowsze wieści ze świata biznesu:*\n"
@@ -55,6 +62,7 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+# — Handler /training
 async def training(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "💼 *Oferta szkoleń sprzedażowych:*\n"
@@ -69,6 +77,7 @@ async def training(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+# — Handler /buy
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "🛒 *Gotowy na rozwój biznesu?*\n\n"
@@ -79,7 +88,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-# 4) Zaplanuj codzienne przypomnienie o 09:00
+# 3️⃣ Funkcja schedulera (codziennie 09:00)
 def scheduled_message():
     bot = Bot(token=BOT_TOKEN)
     bot.send_message(
@@ -90,22 +99,23 @@ def scheduled_message():
         parse_mode=ParseMode.MARKDOWN,
     )
 
+# — Główna funkcja
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Rejestracja komend
+    # ▪️ Rejestracja Komend
     app.add_handler(CommandHandler("start",    start))
     app.add_handler(CommandHandler("fuel",     fuel))
     app.add_handler(CommandHandler("news",     news))
     app.add_handler(CommandHandler("training", training))
     app.add_handler(CommandHandler("buy",      buy))
 
-    # Scheduler
+    # ▪️ Scheduler
     sched = BackgroundScheduler()
     sched.add_job(scheduled_message, "cron", hour=9, minute=0)
     sched.start()
 
-    # Start polling
+    # ▪️ Start polling
     app.run_polling()
 
 if __name__ == "__main__":
